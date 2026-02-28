@@ -3,4 +3,3 @@ YMAI is a general purpose allocator with similar apis like libc malloc() and fre
 - It uses an double-linked list to manage free heap blocks.
 - On-demand coalescing of free blocks
 - First fit placing strategy
--
