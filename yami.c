@@ -1,3 +1,4 @@
+#include <assert.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <string.h>
@@ -16,13 +17,8 @@ typedef struct yami_f_blck_hdr {
   struct yami_f_blck_hdr *prev;
 } yami_f_blck_hdr;
 
-typedef struct yami_a_blck_hdr {
-  unsigned int size;
-} yami_a_blck_hdr;
-
-
-//we store the recently free block
-struct yami_f_blck_hdr *yami_f_hdptr=NULL;
+// we store the recently free block
+struct yami_f_blck_hdr *yami_f_hdptr = NULL;
 
 #define MIN_BLOCK_SIZE (sizeof(yami_f_blck_hdr))
 
@@ -47,25 +43,43 @@ void yami_init_heap() {
 
 // extend the heap
 void *yami_extend_heap() {
+  assert(yami_heap_list != NULL);
   uint8_t *brk_ptr = sbrk(MAX_FREE_BLOCK_SIZE);
   if (brk_ptr == (void *)-1) {
     perror("YAMI heap extension by MAX_FREE_BLOCK_SIZE (4096) failed");
     return NULL;
   }
-  struct yami_f_blck_hdr *temp=( struct yami_f_blck_hdr *)yami_bp--;
-  temp->size=MAX_FREE_BLOCK_SIZE;
-  if(yami_f_hdptr==NULL){
-      temp->prev=NULL;
-      temp->next=NULL;
-      yami_f_hdptr=temp;
-      //TODO: set new yami_bp
-      // end heap boundary block
-      return yami_bp;
+  struct yami_f_blck_hdr *temp = ((struct yami_f_blck_hdr *)yami_bp) - 1;
+  temp->size = MAX_FREE_BLOCK_SIZE;
+  if (yami_f_hdptr == NULL) {
+    // add to the free list
+    temp->prev = NULL;
+    temp->next = NULL;
+    yami_f_hdptr = temp;
+    uintptr_t *yami_bp_old = yami_bp;
+    memset(
+        ((struct yami_f_blck_hdr *)((uintptr_t)yami_bp + MAX_FREE_BLOCK_SIZE)) -
+            1,
+        '\0', (MIN_BLOCK_SIZE));
+    yami_bp = (uintptr_t *)((uintptr_t)yami_bp + MAX_FREE_BLOCK_SIZE);
+
+    assert((uintptr_t)yami_bp_old % DWORD == 0);
+    assert((uintptr_t)yami_bp % DWORD == 0);
+    return yami_bp_old;
   }
-  temp->prev=NULL;
-  temp->next=yami_f_hdptr;
-  yami_f_hdptr=temp;
-  //TODO: set new yami_bp
-  // end heap boundary blocks
-  return yami_bp;
+
+  uintptr_t *yami_bp_old = yami_bp;
+  memset(
+      ((struct yami_f_blck_hdr *)((uintptr_t)yami_bp + MAX_FREE_BLOCK_SIZE)) -
+          1,
+      '\0', (MIN_BLOCK_SIZE));
+  yami_bp = (uintptr_t *)((uintptr_t)yami_bp + MAX_FREE_BLOCK_SIZE);
+  // add to the free list
+  temp->prev = NULL;
+  temp->next = yami_f_hdptr;
+  yami_f_hdptr->prev = temp;
+  yami_f_hdptr = temp;
+  assert((uintptr_t)yami_bp_old % DWORD == 0);
+  assert((uintptr_t)yami_bp % DWORD == 0);
+  return yami_bp_old;
 }
