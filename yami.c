@@ -121,7 +121,7 @@ void *yami_alloc(size_t len) {
       // how do we check the blocks are contigious in memory order???
       if ((uintptr_t)cur + cur->size != (uintptr_t)next) {
         if (sum_block_size < alloc_size) {
-          yami_f_start = cur;
+          yami_f_start = next;
           yami_f_end = NULL;
           sum_block_size = 0;
         }
