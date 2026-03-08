@@ -107,16 +107,32 @@ void *yami_alloc(size_t len) {
   assert(yami_bp != NULL && yami_f_hdptr != NULL);
   struct yami_f_blck_hdr *yami_f_start = yami_f_hdptr;
   struct yami_f_blck_hdr *yami_f_end = NULL;
-
+  size_t sum_block_size = 0;
   struct yami_f_blck_hdr *cur = yami_f_hdptr;
   while (cur) {
+    struct yami_f_blck_hdr *next = cur->next;
     if (cur->size < alloc_size) {
-      // we gather data for colleascing
+      // we gather data for colleascings
+
+      if (sum_block_size < alloc_size) {
+        sum_block_size += cur->size;
+        yami_f_end = cur;
+      }
+      // how do we check the blocks are contigious in memory order???
+      if ((uintptr_t)cur + cur->size != (uintptr_t)next) {
+        if (sum_block_size < alloc_size) {
+          yami_f_start = cur;
+          yami_f_end = NULL;
+          sum_block_size = 0;
+        }
+      }
+      // Now are presented with two choices here, go to the end of the free
+      // list or stop early coleasce and satisfy request
+      cur = next;
     } else {
       // we look forward to hitting this branch
       break;
     }
-    cur = cur->next;
   }
 // When we do we split memory??
 SPLIT:
@@ -170,7 +186,7 @@ SPLIT:
       return bp;
     }
 
-    // cases to remove an allocated header
+    // cases to remove an allocated block
     if (cur->prev == NULL && cur->next == NULL) {
       // 1) cur->prev is null, cur->next is null (only node)
       yami_f_hdptr = NULL;
@@ -194,7 +210,24 @@ SPLIT:
     return bp;
   }
   // When we do we coleasce memory??
-
+  if (sum_block_size > alloc_size) {
+    assert(yami_f_end != NULL && yami_f_start != NULL);
+    struct yami_f_blck_hdr *next = yami_f_end->next;
+    yami_f_start->next = next;
+    next->prev = yami_f_start;
+    yami_f_start->size = sum_block_size;
+    cur = yami_f_start;
+    goto SPLIT;
+  }
+  // When we do we contact the OS for memory??
+  // 2.) We couldn't find a suitable block or enough number of contigious free
+  // blocks to satisfy the request
+  void *bp = yami_extend_heap();
+  if (bp == NULL) {
+    return NULL;
+  }
+  cur = yami_f_hdptr;
+  goto SPLIT;
   // How do we satisfy allocations that are bigger than the default
   // MAX_FREE_BLOCK_SIZE
 
